@@ -771,9 +771,9 @@ function switchPage(name) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('nav-'+name).classList.add('active');
   const fab = document.getElementById('fab');
-  if (name === 'cats') { fab.textContent = '+'; fab.onclick = openAddCatDrawer; fab.style.display = ''; }
-  else if (name === 'vault') { fab.textContent = '+'; fab.onclick = openAddDrawer; fab.style.display = ''; }
-  else if (name === 'dash') { fab.textContent = '+'; fab.onclick = openAddDrawer; fab.style.display = ''; }
+  if (name === 'cats') { fab.textContent = '+'; fab.onclick = () => openAddCatDrawer(); fab.style.display = ''; }
+  else if (name === 'vault') { fab.textContent = '+'; fab.onclick = () => openAddDrawer(); fab.style.display = ''; }
+  else if (name === 'dash') { fab.textContent = '+'; fab.onclick = () => openAddDrawer(); fab.style.display = ''; }
   else { fab.style.display = 'none'; }
   if (name === 'dash') renderDash();
   if (name === 'vault') renderVault();
@@ -869,6 +869,8 @@ function escHtml(s) {
 // ADD / EDIT ACCOUNT
 // ============================================================
 function openAddDrawer(editId) {
+  // Guard: if called with a DOM Event (e.g. from onclick), treat as new account
+  if (editId && typeof editId !== 'string') editId = null;
   populateCatSelect();
   document.getElementById('editId').value = editId || '';
   document.getElementById('addDrawerTitle').textContent = editId ? 'Edit Account' : 'Add Account';
