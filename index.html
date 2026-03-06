@@ -652,9 +652,8 @@ async function confirmSetup() {
     {id:'cat_shopping',name:'Shopping',emoji:'🛍',color:'shopping'},
     {id:'cat_other',name:'Other',emoji:'🔒',color:'other'},
   ];
-  save();
+  await save();
   showScreen('appScreen');
-  renderAll();
 }
 async function attemptLogin(pin) {
   const hash = await hashPin(pin);
@@ -755,6 +754,10 @@ function errorDots(id) {
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  // Always re-render dashboard when app becomes visible
+  if (id === 'appScreen') {
+    switchPage(currentPage || 'dash');
+  }
 }
 
 // ============================================================
@@ -891,7 +894,7 @@ function populateCatSelect() {
   const sel = document.getElementById('fCat');
   sel.innerHTML = state.categories.map(c => `<option value="${c.id}">${c.emoji} ${c.name}</option>`).join('');
 }
-function saveAccount() {
+async function saveAccount() {
   const name = document.getElementById('fName').value.trim();
   const pass = document.getElementById('fPass').value.trim();
   if (!name) { toast('Account name is required','error'); return; }
@@ -912,17 +915,17 @@ function saveAccount() {
   } else {
     state.accounts.push(acc);
   }
-  save();
+  await save();
   closeDrawer('addOverlay','addDrawer');
   renderAll();
   toast(editId ? 'Account updated' : 'Account saved', 'success');
 }
-function deleteCurrentAccount() {
+async function deleteCurrentAccount() {
   const id = document.getElementById('editId').value;
   if (!id) return;
   if (!confirm('Delete this account?')) return;
   state.accounts = state.accounts.filter(a=>a.id!==id);
-  save();
+  await save();
   closeDrawer('addOverlay','addDrawer');
   renderAll();
   toast('Account deleted','error');
@@ -975,10 +978,10 @@ function editFromDetail() {
   closeDrawer('detailOverlay','detailDrawer');
   setTimeout(() => openAddDrawer(currentDetailId), 300);
 }
-function deleteFromDetail() {
+async function deleteFromDetail() {
   if (!confirm('Delete this account?')) return;
   state.accounts = state.accounts.filter(a=>a.id!==currentDetailId);
-  save();
+  await save();
   closeDrawer('detailOverlay','detailDrawer');
   renderAll();
   toast('Account deleted','error');
@@ -1055,13 +1058,13 @@ function openAddCatDrawer() {
   document.getElementById('catEmoji').value = '';
   openDrawer('catOverlay','catDrawer');
 }
-function saveCategory() {
+async function saveCategory() {
   const name = document.getElementById('catName').value.trim();
   const emoji = document.getElementById('catEmoji').value.trim() || '📁';
   if (!name) { toast('Category name required','error'); return; }
   const id = 'cat_'+Date.now();
   state.categories.push({id, name, emoji, color:'other'});
-  save();
+  await save();
   closeDrawer('catOverlay','catDrawer');
   renderCats();
   toast('Category added!','success');
