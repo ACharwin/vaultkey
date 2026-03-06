@@ -653,7 +653,7 @@ async function confirmSetup() {
     {id:'cat_other',name:'Other',emoji:'🔒',color:'other'},
   ];
   await save();
-  showScreen('appScreen');
+  setTimeout(() => showScreen('appScreen'), 50);
 }
 async function attemptLogin(pin) {
   const hash = await hashPin(pin);
@@ -674,8 +674,8 @@ function lockPin(d) {
     attemptLogin(lockCurrent).then(ok => {
       if (ok) {
         lockAttempts = 0;
-        showScreen('appScreen');
-        renderAll();
+        // Small delay ensures any pending IndexedDB ops are done
+        setTimeout(() => showScreen('appScreen'), 50);
       } else {
         lockAttempts++;
         errorDots('lockDots');
@@ -716,8 +716,7 @@ async function tryBiometric() {
       }
     });
     if (result) {
-      showScreen('appScreen');
-      renderAll();
+      setTimeout(() => showScreen('appScreen'), 50);
     }
   } catch(e) {
     if (e.name === 'NotAllowedError') { toast('Biometric cancelled','error'); }
@@ -775,10 +774,13 @@ function switchPage(name) {
   else if (name === 'vault') { fab.textContent = '+'; fab.onclick = () => openAddDrawer(); fab.style.display = ''; }
   else if (name === 'dash') { fab.textContent = '+'; fab.onclick = () => openAddDrawer(); fab.style.display = ''; }
   else { fab.style.display = 'none'; }
-  if (name === 'dash') renderDash();
-  if (name === 'vault') renderVault();
-  if (name === 'cats') renderCats();
-  if (name === 'settings') updateBioToggle();
+  // Defer render slightly so DOM is ready
+  setTimeout(() => {
+    if (name === 'dash') renderDash();
+    if (name === 'vault') renderVault();
+    if (name === 'cats') renderCats();
+    if (name === 'settings') updateBioToggle();
+  }, 30);
 }
 
 // ============================================================
@@ -918,6 +920,11 @@ async function saveAccount() {
     state.accounts.push(acc);
   }
   await save();
+  // Always clear the form fully after save so next open is fresh
+  document.getElementById('editId').value = '';
+  ['fName','fUser','fPass','fUrl','fNotes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('pwStrengthBar').style.background = '';
+  document.getElementById('pwStrengthLabel').textContent = '';
   closeDrawer('addOverlay','addDrawer');
   renderAll();
   toast(editId ? 'Account updated' : 'Account saved', 'success');
@@ -1163,6 +1170,13 @@ function openDrawer(overlayId, drawerId) {
 function closeDrawer(overlayId, drawerId) {
   document.getElementById(overlayId).classList.remove('active');
   document.getElementById(drawerId).classList.remove('active');
+  // If closing the add/edit drawer, always wipe the form
+  if (drawerId === 'addDrawer') {
+    document.getElementById('editId').value = '';
+    ['fName','fUser','fPass','fUrl','fNotes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('pwStrengthBar').style.background = '';
+    document.getElementById('pwStrengthLabel').textContent = '';
+  }
 }
 
 // ============================================================
