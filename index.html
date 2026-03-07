@@ -1336,43 +1336,55 @@ async function backupLocal() {
 }
 
 // GOOGLE DRIVE BACKUP
-async function backupGDrive() {
-  closeDrawer('backupOverlay', 'backupDrawer');
-  const encrypted = await buildEncryptedPayload();
-  if (!encrypted) return;
-
-  toast('Connecting to Google Drive...', '');
-
-  // Use Google Identity Services token client
-  const tokenClient = google.accounts.oauth2.initTokenClient({
+// FIX 5: Helper to safely get GIS token client — guards against script not loaded yet
+function getGISTokenClient(callback) {
+  if (!window.google?.accounts?.oauth2) {
+    toast('Google Sign-in not ready yet — please try again', 'error');
+    return null;
+  }
+  return google.accounts.oauth2.initTokenClient({
     client_id: GDRIVE_CLIENT_ID,
     scope: GDRIVE_SCOPES,
-    callback: async (tokenResponse) => {
-      if (tokenResponse.error) {
-        toast('Google sign-in failed', 'error');
-        return;
-      }
-      const accessToken = tokenResponse.access_token;
-      try {
-        await uploadToGDrive(encrypted, accessToken);
-      } catch(e) {
-        toast('Upload failed: ' + e.message, 'error');
-      }
+    prompt: '',        // FIX 4: empty = reuse existing grant, no re-consent every time
+    callback
+  });
+}
+
+async function backupGDrive() {
+  closeDrawer('backupOverlay', 'backupDrawer');
+
+  // FIX 1: OAuth FIRST, then encrypt — no wasted PIN dialog if sign-in fails
+  toast('Connecting to Google Drive...', '');
+
+  const tokenClient = getGISTokenClient(async (tokenResponse) => {
+    if (tokenResponse.error) {
+      toast('Google sign-in failed', 'error');
+      return;
+    }
+    const accessToken = tokenResponse.access_token;
+
+    // Now ask for PIN and encrypt
+    const encrypted = await buildEncryptedPayload();
+    if (!encrypted) return;
+
+    try {
+      await uploadToGDrive(encrypted, accessToken);
+    } catch(e) {
+      toast('Upload failed: ' + e.message, 'error');
     }
   });
-  tokenClient.requestAccessToken({ prompt: 'consent' });
+  if (tokenClient) tokenClient.requestAccessToken();
 }
 
 async function uploadToGDrive(encrypted, accessToken) {
   const fileName = `vaultkey_backup_${new Date().toISOString().split('T')[0]}.vke`;
   const fileContent = JSON.stringify(encrypted);
 
-  // Step 1: Find or create VaultKey folder
   toast('Finding VaultKey folder...', '');
-  let folderId = await getOrCreateGDriveFolder('VaultKey', 'root', accessToken);
-  let backupFolderId = await getOrCreateGDriveFolder('Backups', folderId, accessToken);
+  // FIX 3: getOrCreateGDriveFolder now throws on failure with clear message
+  const folderId = await getOrCreateGDriveFolder('VaultKey', 'root', accessToken);
+  const backupFolderId = await getOrCreateGDriveFolder('Backups', folderId, accessToken);
 
-  // Step 2: Upload file
   toast('Uploading encrypted backup...', '');
   const metadata = {
     name: fileName,
@@ -1390,21 +1402,26 @@ async function uploadToGDrive(encrypted, accessToken) {
     body: form
   });
 
-  if (!res.ok) throw new Error('Drive upload failed');
+  if (!res.ok) {
+    // WARN FIX: read error body for better message
+    let errMsg = 'Drive upload failed';
+    try { const err = await res.json(); errMsg = err?.error?.message || errMsg; } catch(e) {}
+    throw new Error(errMsg);
+  }
   toast('✅ Backup saved to Google Drive → VaultKey/Backups!', 'success');
 }
 
 async function getOrCreateGDriveFolder(name, parentId, accessToken) {
-  // Search for existing folder
   const query = `name='${name}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
   const searchRes = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
+  if (!searchRes.ok) throw new Error(`Could not search for folder "${name}"`);
   const searchData = await searchRes.json();
 
   if (searchData.files && searchData.files.length > 0) {
-    return searchData.files[0].id; // folder already exists
+    return searchData.files[0].id;
   }
 
   // Create folder
@@ -1420,7 +1437,10 @@ async function getOrCreateGDriveFolder(name, parentId, accessToken) {
       parents: [parentId]
     })
   });
+  // FIX 3: check create response
+  if (!createRes.ok) throw new Error(`Could not create folder "${name}" on Google Drive`);
   const folder = await createRes.json();
+  if (!folder.id) throw new Error(`Folder "${name}" created but ID missing`);
   return folder.id;
 }
 function restoreData() {
@@ -1441,23 +1461,22 @@ async function restoreGDrive() {
   closeDrawer('restoreOverlay', 'restoreDrawer');
   toast('Connecting to Google Drive...', '');
 
-  const tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GDRIVE_CLIENT_ID,
-    scope: GDRIVE_SCOPES,
-    callback: async (tokenResponse) => {
-      if (tokenResponse.error) {
-        toast('Google sign-in failed', 'error');
-        return;
-      }
-      gdriveRestoreToken = tokenResponse.access_token;
-      try {
-        await listGDriveBackups(gdriveRestoreToken);
-      } catch(e) {
-        toast('Could not list backups: ' + e.message, 'error');
-      }
+  // FIX 2 + FIX 5: fresh token every time + GIS guard
+  const tokenClient = getGISTokenClient(async (tokenResponse) => {
+    if (tokenResponse.error) {
+      toast('Google sign-in failed', 'error');
+      return;
+    }
+    // FIX 2: always use fresh token, never rely on stored one
+    const freshToken = tokenResponse.access_token;
+    gdriveRestoreToken = freshToken;
+    try {
+      await listGDriveBackups(freshToken);
+    } catch(e) {
+      toast('Could not list backups: ' + e.message, 'error');
     }
   });
-  tokenClient.requestAccessToken({ prompt: 'consent' });
+  if (tokenClient) tokenClient.requestAccessToken();
 }
 
 async function listGDriveBackups(accessToken) {
@@ -1469,9 +1488,10 @@ async function listGDriveBackups(accessToken) {
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(vkQuery)}&fields=files(id,name)`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
+  if (!vkRes.ok) throw new Error('Could not connect to Google Drive');
   const vkData = await vkRes.json();
   if (!vkData.files || vkData.files.length === 0) {
-    toast('No VaultKey folder found on Google Drive', 'error');
+    toast('No VaultKey folder found on Google Drive. Backup there first!', 'error');
     return;
   }
 
@@ -1481,18 +1501,20 @@ async function listGDriveBackups(accessToken) {
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(bkQuery)}&fields=files(id,name)`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
+  if (!bkRes.ok) throw new Error('Could not search Backups folder');
   const bkData = await bkRes.json();
   if (!bkData.files || bkData.files.length === 0) {
     toast('No Backups folder found in VaultKey on Google Drive', 'error');
     return;
   }
 
-  // List .vke files
+  // WARN FIX: orderBy as a proper separate query param
   const filesQuery = `'${bkData.files[0].id}' in parents and trashed=false and name contains 'vaultkey_backup'`;
   const filesRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(filesQuery)}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc`,
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(filesQuery)}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime+desc`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
+  if (!filesRes.ok) throw new Error('Could not list backup files');
   const filesData = await filesRes.json();
 
   if (!filesData.files || filesData.files.length === 0) {
@@ -1500,7 +1522,6 @@ async function listGDriveBackups(accessToken) {
     return;
   }
 
-  // Show file picker drawer
   showGDriveFilePicker(filesData.files, accessToken);
 }
 
