@@ -209,6 +209,18 @@
   .cat-count { font-size: 11px; font-family: var(--font-mono); color: var(--muted); }
   .cat-del { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; font-size: 18px; }
 
+
+  /* CUSTOM DIALOG */
+  .dialog-box { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9); background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 28px 24px 20px; z-index: 200; width: calc(100% - 48px); max-width: 340px; opacity: 0; pointer-events: none; transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1); }
+  .dialog-box.active { opacity: 1; pointer-events: all; transform: translate(-50%, -50%) scale(1); }
+  .dialog-icon { font-size: 40px; text-align: center; margin-bottom: 12px; }
+  .dialog-title { font-size: 18px; font-weight: 800; text-align: center; margin-bottom: 8px; }
+  .dialog-message { font-size: 13px; color: var(--muted); text-align: center; line-height: 1.6; margin-bottom: 16px; white-space: pre-line; }
+  .dialog-input-wrap { margin-bottom: 6px; }
+  .dialog-input-hint { font-size: 11px; color: var(--muted); text-align: center; margin-top: 6px; font-family: var(--font-mono); }
+  .dialog-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .dialog-actions .btn { flex: 1; padding: 12px; font-size: 14px; }
+
   /* TOAST */
   .toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%) translateY(-20px); background: var(--surface); border: 1px solid var(--border); border-radius: 40px; padding: 10px 20px; font-size: 13px; font-weight: 600; z-index: 200; opacity: 0; transition: all 0.3s; pointer-events: none; white-space: nowrap; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -530,6 +542,20 @@
     </div>
     <button class="btn btn-primary" onclick="changePIN()">🔑 Update PIN</button>
   </div>
+</div>
+
+
+<!-- CUSTOM DIALOG -->
+<div class="overlay" id="dialogOverlay"></div>
+<div class="dialog-box" id="dialogBox">
+  <div class="dialog-icon" id="dialogIcon"></div>
+  <div class="dialog-title" id="dialogTitle"></div>
+  <div class="dialog-message" id="dialogMessage"></div>
+  <div class="dialog-input-wrap" id="dialogInputWrap" style="display:none">
+    <input class="form-input" id="dialogInput" placeholder="" autocomplete="off" spellcheck="false">
+    <div class="dialog-input-hint" id="dialogInputHint"></div>
+  </div>
+  <div class="dialog-actions" id="dialogActions"></div>
 </div>
 
 <!-- FILE INPUT FOR RESTORE -->
@@ -944,7 +970,14 @@ async function saveAccount() {
 async function deleteCurrentAccount() {
   const id = document.getElementById('editId').value;
   if (!id) return;
-  if (!confirm('Delete this account?')) return;
+  const { confirmed } = await showDialog({
+    title: 'Delete Account?',
+    message: 'This account will be permanently deleted.\nThis cannot be undone.',
+    type: 'danger',
+    confirmText: 'Delete',
+    cancelText: 'Cancel'
+  });
+  if (!confirmed) return;
   state.accounts = state.accounts.filter(a=>a.id!==id);
   await save();
   closeDrawer('addOverlay','addDrawer');
@@ -1000,7 +1033,14 @@ function editFromDetail() {
   setTimeout(() => openAddDrawer(currentDetailId), 300);
 }
 async function deleteFromDetail() {
-  if (!confirm('Delete this account?')) return;
+  const { confirmed } = await showDialog({
+    title: 'Delete Account?',
+    message: 'This account will be permanently deleted.\nThis cannot be undone.',
+    type: 'danger',
+    confirmText: 'Delete',
+    cancelText: 'Cancel'
+  });
+  if (!confirmed) return;
   state.accounts = state.accounts.filter(a=>a.id!==currentDetailId);
   await save();
   closeDrawer('detailOverlay','detailDrawer');
@@ -1090,9 +1130,16 @@ async function saveCategory() {
   renderCats();
   toast('Category added!','success');
 }
-function deleteCat(id) {
+async function deleteCat(id) {
   if (state.accounts.some(a=>a.catId===id)) { toast("Can't delete — has accounts",'error'); return; }
-  if (!confirm('Delete this category?')) return;
+  const { confirmed: catConfirmed } = await showDialog({
+    title: 'Delete Category?',
+    message: 'This category will be permanently removed.',
+    type: 'danger',
+    confirmText: 'Delete',
+    cancelText: 'Cancel'
+  });
+  if (!catConfirmed) return;
   state.categories = state.categories.filter(c=>c.id!==id);
   save();
   renderCats();
@@ -1133,7 +1180,15 @@ function handleRestore(event) {
     try {
       const payload = JSON.parse(e.target.result);
       if (!payload.vaultkey) { toast('Invalid backup file','error'); return; }
-      if (!confirm('Restore will replace ALL current data. Continue?')) return;
+      const { confirmed: restoreConfirmed } = await showDialog({
+        title: 'Restore Vault?',
+        message: 'This will replace ALL your current data\nwith the backup file contents.\n\nYour existing accounts will be overwritten.',
+        icon: '♻️',
+        type: 'warning',
+        confirmText: 'Restore',
+        cancelText: 'Cancel'
+      });
+      if (!restoreConfirmed) return;
       state = payload.data;
       save();
       renderAll();
@@ -1167,36 +1222,6 @@ async function changePIN() {
 // ============================================================
 // RESET
 // ============================================================
-function confirmReset() {
-  const accCount = state.accounts.length;
-  const catCount = state.categories.length;
-
-  // Step 1 — descriptive warning
-  const step1 = confirm(
-    '⚠️ RESET VAULT\n\n' +
-    'This will permanently erase ALL of the following:\n\n' +
-    '  • ' + accCount + ' saved account(s)\n' +
-    '  • ' + catCount + ' categories\n' +
-    '  • Your Master PIN\n\n' +
-    'You will need to set up VaultKey completely from scratch.\n\n' +
-    'Do you want to continue?'
-  );
-  if (!step1) return;
-
-  // Step 2 — must type RESET exactly
-  const userInput = prompt(
-    '🔴 FINAL WARNING\n\n' +
-    'This action CANNOT be undone.\n\n' +
-    'Type  RESET  (all caps) to confirm:'
-  );
-  if (userInput !== 'RESET') {
-    toast('Reset cancelled — you must type RESET exactly', 'error');
-    return;
-  }
-
-  resetApp();
-}
-
 async function resetApp() {
   if (!db) { location.reload(); return; }
   return new Promise((resolve) => {
@@ -1236,6 +1261,73 @@ function toast(msg, type='') {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
 }
+
+
+// ============================================================
+// CUSTOM DIALOG ENGINE
+// ============================================================
+let dialogResolve = null;
+
+function showDialog({ title, message, icon, type = 'danger', confirmText = 'Confirm', cancelText = 'Cancel', requireInput = false, inputPlaceholder = '', inputHint = '' }) {
+  return new Promise((resolve) => {
+    dialogResolve = resolve;
+
+    const colorMap = {
+      danger:  'var(--danger)',
+      warning: 'var(--warn)',
+      info:    'var(--accent)',
+      success: 'var(--success)'
+    };
+    const iconMap = {
+      danger:  icon || '🗑️',
+      warning: icon || '⚠️',
+      info:    icon || 'ℹ️',
+      success: icon || '✅'
+    };
+
+    document.getElementById('dialogIcon').textContent = iconMap[type];
+    document.getElementById('dialogTitle').textContent = title;
+    document.getElementById('dialogMessage').textContent = message;
+
+    // Input field
+    const inputWrap = document.getElementById('dialogInputWrap');
+    const inputEl = document.getElementById('dialogInput');
+    const hintEl = document.getElementById('dialogInputHint');
+    if (requireInput) {
+      inputWrap.style.display = '';
+      inputEl.value = '';
+      inputEl.placeholder = inputPlaceholder || 'Type here...';
+      hintEl.textContent = inputHint || '';
+      setTimeout(() => inputEl.focus(), 100);
+    } else {
+      inputWrap.style.display = 'none';
+    }
+
+    // Buttons
+    const color = colorMap[type];
+    document.getElementById('dialogActions').innerHTML = `
+      <button class="btn btn-ghost" onclick="closeDialog(false)">${cancelText}</button>
+      <button class="btn" style="background:${color};color:#fff;flex:1" onclick="closeDialog(true)">${confirmText}</button>
+    `;
+
+    document.getElementById('dialogOverlay').classList.add('active');
+    document.getElementById('dialogBox').classList.add('active');
+  });
+}
+
+function closeDialog(confirmed) {
+  const inputEl = document.getElementById('dialogInput');
+  const inputVal = inputEl.value;
+  document.getElementById('dialogOverlay').classList.remove('active');
+  document.getElementById('dialogBox').classList.remove('active');
+  if (dialogResolve) {
+    dialogResolve({ confirmed, input: inputVal });
+    dialogResolve = null;
+  }
+}
+
+// Close on overlay tap
+document.getElementById('dialogOverlay').addEventListener('click', () => closeDialog(false));
 
 // ============================================================
 // INIT — async startup using IndexedDB
