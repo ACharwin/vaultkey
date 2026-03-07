@@ -116,7 +116,7 @@
   .recent-list { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
   .cat-chips { display: flex; gap: 8px; padding: 0 20px 16px; overflow-x: auto; scrollbar-width: none; }
   .cat-chips::-webkit-scrollbar { display: none; }
-  .cat-chip { flex-shrink: 0; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .cat-chip { flex-shrink: 0; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; min-width: fit-content; white-space: nowrap; height: 32px; display: flex; align-items: center; }
   .cat-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
   /* ACCOUNT CARD */
