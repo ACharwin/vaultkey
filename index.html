@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0a0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VaultKey">
+<title>VaultKey</title>
+<link rel="manifest" href="manifest.json">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('./sw.js');
+        // Force the new service worker to activate immediately
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New version available - reload to get fresh files
+              window.location.reload();
+            }
+          });
+        });
+      } catch(e) {}
+    });
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c27;
+    --border: #2a2a3d;
+    --accent: #7c6af7;
+    --accent2: #e066ff;
+    --accent3: #00d4ff;
+    --text: #e8e8f0;
+    --muted: #7a7a9a;
+    --danger: #ff4d6d;
+    --success: #00e5a0;
+    --warn: #ffb347;
+    --radius: 14px;
+    --font-mono: 'Space Mono', monospace;
+    --font-ui: 'Syne', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--font-ui); }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* SCREENS */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; overflow: hidden; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+  .screen.active { opacity: 1; pointer-events: all; }
+
+  /* LOCK SCREEN */
+  #lockScreen { background: var(--bg); align-items: center; justify-content: center; gap: 32px; }
+  #lockScreen .logo { text-align: center; }
+  #lockScreen .logo-icon { width: 80px; height: 80px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 24px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; font-size: 36px; box-shadow: 0 0 40px rgba(124,106,247,0.4); }
+  #lockScreen .logo h1 { font-size: 32px; font-weight: 800; letter-spacing: -1px; }
+  #lockScreen .logo p { color: var(--muted); font-size: 13px; margin-top: 4px; font-family: var(--font-mono); }
+  .pin-dots { display: flex; gap: 16px; justify-content: center; }
+  .pin-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--border); transition: all 0.2s; }
+  .pin-dot.filled { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 12px rgba(124,106,247,0.6); }
+  .pin-dot.error { background: var(--danger); border-color: var(--danger); animation: shake 0.4s; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+  .numpad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+  .numpad-btn { width: 72px; height: 72px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 22px; font-weight: 700; font-family: var(--font-ui); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 1px; transition: all 0.15s; user-select: none; }
+  .numpad-btn:active { background: var(--surface2); transform: scale(0.94); }
+  .numpad-btn .sub { font-size: 8px; font-family: var(--font-mono); color: var(--muted); letter-spacing: 1px; }
+  .numpad-btn.del { background: transparent; border-color: transparent; color: var(--muted); font-size: 18px; }
+  .bio-btn { display: flex; align-items: center; gap: 8px; background: transparent; border: 1px solid var(--border); border-radius: 40px; padding: 10px 20px; color: var(--muted); cursor: pointer; font-family: var(--font-ui); font-size: 13px; transition: all 0.2s; }
+  .bio-btn:active { color: var(--accent); border-color: var(--accent); }
+  .lock-hint { font-family: var(--font-mono); font-size: 11px; color: var(--muted); text-align: center; }
+
+  /* SETUP SCREEN */
+  #setupScreen { background: var(--bg); padding: 40px 24px; gap: 24px; overflow-y: auto; }
+  #setupScreen h1 { font-size: 28px; font-weight: 800; }
+  #setupScreen p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+  /* NAV */
+  .nav-bar { flex-shrink: 0; display: flex; background: var(--surface); border-top: 1px solid var(--border); padding: 8px 0 max(8px, env(safe-area-inset-bottom)); }
+  .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; background: none; border: none; color: var(--muted); cursor: pointer; font-family: var(--font-ui); font-size: 10px; font-weight: 600; letter-spacing: 0.5px; transition: color 0.2s; }
+  .nav-btn svg { width: 22px; height: 22px; }
+  .nav-btn.active { color: var(--accent); }
+  .nav-btn.active svg { filter: drop-shadow(0 0 6px rgba(124,106,247,0.6)); }
+
+  /* MAIN APP */
+  #appScreen { background: var(--bg); }
+  .app-content { flex: 1; overflow-y: auto; }
+
+  /* PAGES */
+  .page { display: none; flex-direction: column; height: 100%; overflow-y: auto; }
+  .page.active { display: flex; }
+  .page-header { flex-shrink: 0; padding: 16px 20px 12px; padding-top: max(16px, env(safe-area-inset-top)); }
+  .page-title { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; }
+  .page-sub { font-size: 12px; color: var(--muted); font-family: var(--font-mono); margin-top: 2px; }
+
+  /* DASHBOARD */
+  #dashPage .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 0 20px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; position: relative; overflow: hidden; }
+  .stat-card::before { content: ''; position: absolute; top: -20px; right: -20px; width: 60px; height: 60px; border-radius: 50%; opacity: 0.15; }
+  .stat-card.blue::before { background: var(--accent); }
+  .stat-card.pink::before { background: var(--accent2); }
+  .stat-card.cyan::before { background: var(--accent3); }
+  .stat-card.green::before { background: var(--success); }
+  .stat-num { font-size: 36px; font-weight: 800; font-family: var(--font-mono); line-height: 1; }
+  .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; letter-spacing: 0.5px; text-transform: uppercase; }
+  .section-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; padding: 0 20px; margin-bottom: 10px; }
+  .recent-list { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .cat-chips { display: flex; gap: 8px; padding: 0 20px 16px; overflow-x: auto; scrollbar-width: none; }
+  .cat-chips::-webkit-scrollbar { display: none; }
+  .cat-chip { flex-shrink: 0; padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+  .cat-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ACCOUNT CARD */
+  .acc-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: all 0.2s; position: relative; }
+  .acc-card:active { background: var(--surface2); transform: scale(0.98); }
+  .acc-avatar { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .acc-info { flex: 1; min-width: 0; }
+  .acc-name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .acc-url { font-size: 11px; color: var(--muted); font-family: var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .acc-cat { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; letter-spacing: 0.3px; }
+  .acc-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+
+  /* VAULT PAGE */
+  #vaultPage .search-wrap { padding: 0 20px 12px; position: relative; }
+  .search-input { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px 12px 44px; color: var(--text); font-size: 14px; font-family: var(--font-ui); outline: none; transition: border-color 0.2s; }
+  .search-input:focus { border-color: var(--accent); }
+  .search-icon { position: absolute; left: 36px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+  .vault-list { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .empty-state { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 60px 20px; text-align: center; }
+  .empty-state .icon { font-size: 48px; opacity: 0.3; }
+  .empty-state p { color: var(--muted); font-size: 14px; }
+
+  /* FAB */
+  .fab { position: fixed; bottom: calc(68px + max(0px, env(safe-area-inset-bottom))); right: 20px; width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent2)); border: none; color: #fff; font-size: 28px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 24px rgba(124,106,247,0.5); transition: all 0.2s; z-index: 50; }
+  .fab:active { transform: scale(0.92); }
+
+  /* MODAL / DRAWER */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+  .overlay.active { opacity: 1; pointer-events: all; }
+  .drawer { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-radius: 24px 24px 0 0; border-top: 1px solid var(--border); z-index: 101; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.32,0.72,0,1); max-height: 92vh; display: flex; flex-direction: column; }
+  .drawer.active { transform: translateY(0); }
+  .drawer-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 12px auto 4px; flex-shrink: 0; }
+  .drawer-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 20px 16px; flex-shrink: 0; }
+  .drawer-title { font-size: 20px; font-weight: 800; }
+  .drawer-close { width: 32px; height: 32px; border-radius: 50%; background: var(--surface2); border: none; color: var(--muted); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+  .drawer-body { overflow-y: auto; padding: 0 20px 40px; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+
+  /* FORM */
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+  .form-input, .form-select, .form-textarea { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--text); font-size: 14px; font-family: var(--font-ui); outline: none; transition: border-color 0.2s; width: 100%; }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--accent); }
+  .form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a7a9a' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+  .form-select option { background: var(--surface); }
+  .form-textarea { resize: none; min-height: 80px; }
+  .pw-wrap { position: relative; }
+  .pw-wrap .form-input { padding-right: 44px; font-family: var(--font-mono); }
+  .pw-toggle { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; font-size: 16px; }
+  .pw-strength { height: 3px; border-radius: 2px; margin-top: 6px; transition: all 0.3s; }
+  .pw-strength-label { font-size: 10px; color: var(--muted); margin-top: 2px; font-family: var(--font-mono); }
+  .gen-pw-btn { background: var(--surface2); border: 1px dashed var(--border); border-radius: 8px; padding: 8px 12px; color: var(--accent); font-size: 12px; font-family: var(--font-ui); font-weight: 600; cursor: pointer; text-align: left; transition: all 0.2s; }
+  .gen-pw-btn:active { background: var(--surface); }
+
+  /* BUTTONS */
+  .btn { padding: 14px; border-radius: 12px; font-family: var(--font-ui); font-size: 15px; font-weight: 700; border: none; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; box-shadow: 0 4px 20px rgba(124,106,247,0.35); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; }
+
+  /* DETAIL DRAWER */
+  .detail-field { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .detail-field-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; margin-bottom: 4px; }
+  .detail-field-val { font-family: var(--font-mono); font-size: 13px; word-break: break-all; flex: 1; }
+  .detail-field-val.masked { letter-spacing: 4px; font-size: 16px; color: var(--muted); }
+  .copy-btn { background: var(--surface2); border: none; color: var(--accent); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-family: var(--font-ui); font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+  .copy-btn:active { background: var(--accent); color: #fff; }
+  .detail-actions { display: flex; gap: 10px; }
+
+  /* SETTINGS PAGE */
+  #settingsPage .settings-list { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .settings-section { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; padding: 16px 0 8px; }
+  .setting-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: background 0.2s; }
+  .setting-item:active { background: var(--surface2); }
+  .setting-left { display: flex; align-items: center; gap: 14px; }
+  .setting-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .setting-info h3 { font-size: 14px; font-weight: 600; }
+  .setting-info p { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .toggle { width: 46px; height: 26px; background: var(--border); border-radius: 13px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+  .toggle.on { background: var(--accent); }
+  .toggle::after { content: ''; position: absolute; width: 20px; height: 20px; background: #fff; border-radius: 50%; top: 3px; left: 3px; transition: transform 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+  .toggle.on::after { transform: translateX(20px); }
+
+  /* CATEGORIES PAGE */
+  #catsPage .cats-list { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .cat-item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
+  .cat-emoji { font-size: 24px; width: 40px; text-align: center; }
+  .cat-item-name { flex: 1; font-weight: 600; font-size: 15px; }
+  .cat-count { font-size: 11px; font-family: var(--font-mono); color: var(--muted); }
+  .cat-del { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; font-size: 18px; }
+
+  /* TOAST */
+  .toast { position: fixed; top: 60px; left: 50%; transform: translateX(-50%) translateY(-20px); background: var(--surface); border: 1px solid var(--border); border-radius: 40px; padding: 10px 20px; font-size: 13px; font-weight: 600; z-index: 200; opacity: 0; transition: all 0.3s; pointer-events: none; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--success); color: var(--success); }
+  .toast.error { border-color: var(--danger); color: var(--danger); }
+
+  /* CATEGORY COLORS */
+  .cat-social { color: #7c6af7; background: rgba(124,106,247,0.15); }
+  .cat-finance { color: #00e5a0; background: rgba(0,229,160,0.15); }
+  .cat-work { color: #00d4ff; background: rgba(0,212,255,0.15); }
+  .cat-email { color: #ffb347; background: rgba(255,179,71,0.15); }
+  .cat-shopping { color: #e066ff; background: rgba(224,102,255,0.15); }
+  .cat-other { color: #7a7a9a; background: rgba(122,122,154,0.15); }
+
+  .avatar-social { background: rgba(124,106,247,0.2); }
+  .avatar-finance { background: rgba(0,229,160,0.2); }
+  .avatar-work { background: rgba(0,212,255,0.2); }
+  .avatar-email { background: rgba(255,179,71,0.2); }
+  .avatar-shopping { background: rgba(224,102,255,0.2); }
+  .avatar-other { background: rgba(122,122,154,0.2); }
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- SETUP SCREEN -->
+<div class="screen" id="setupScreen">
+  <div style="text-align:center">
+    <div style="width:70px;height:70px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:20px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:32px;">🔐</div>
+    <h1 style="font-size:28px;font-weight:800">Welcome to VaultKey</h1>
+    <p style="color:var(--muted);font-size:14px;margin-top:8px">Your offline password vault.<br>Set a master PIN to get started.</p>
+  </div>
+  <div id="setupPinSection" style="width:100%;max-width:320px;margin:0 auto;display:flex;flex-direction:column;gap:16px">
+    <p id="setupLabel" style="text-align:center;font-family:var(--font-mono);font-size:12px;color:var(--muted)">CHOOSE A 6-DIGIT MASTER PIN</p>
+    <div class="pin-dots" id="setupDots">
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+      <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    </div>
+    <div class="numpad" style="margin:0 auto">
+      <button class="numpad-btn" onclick="setupPin('1')">1</button>
+      <button class="numpad-btn" onclick="setupPin('2')">2<div class="sub">ABC</div></button>
+      <button class="numpad-btn" onclick="setupPin('3')">3<div class="sub">DEF</div></button>
+      <button class="numpad-btn" onclick="setupPin('4')">4<div class="sub">GHI</div></button>
+      <button class="numpad-btn" onclick="setupPin('5')">5<div class="sub">JKL</div></button>
+      <button class="numpad-btn" onclick="setupPin('6')">6<div class="sub">MNO</div></button>
+      <button class="numpad-btn" onclick="setupPin('7')">7<div class="sub">PQRS</div></button>
+      <button class="numpad-btn" onclick="setupPin('8')">8<div class="sub">TUV</div></button>
+      <button class="numpad-btn" onclick="setupPin('9')">9<div class="sub">WXYZ</div></button>
+      <div></div>
+      <button class="numpad-btn" onclick="setupPin('0')">0</button>
+      <button class="numpad-btn del" onclick="setupPinDel()">⌫</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOCK SCREEN -->
+<div class="screen" id="lockScreen">
+  <div class="logo">
+    <div class="logo-icon">🔐</div>
+    <h1>VaultKey</h1>
+    <p>YOUR OFFLINE VAULT</p>
+  </div>
+  <div class="pin-dots" id="lockDots">
+    <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+  </div>
+  <div class="numpad">
+    <button class="numpad-btn" onclick="lockPin('1')">1</button>
+    <button class="numpad-btn" onclick="lockPin('2')">2<div class="sub">ABC</div></button>
+    <button class="numpad-btn" onclick="lockPin('3')">3<div class="sub">DEF</div></button>
+    <button class="numpad-btn" onclick="lockPin('4')">4<div class="sub">GHI</div></button>
+    <button class="numpad-btn" onclick="lockPin('5')">5<div class="sub">JKL</div></button>
+    <button class="numpad-btn" onclick="lockPin('6')">6<div class="sub">MNO</div></button>
+    <button class="numpad-btn" onclick="lockPin('7')">7<div class="sub">PQRS</div></button>
+    <button class="numpad-btn" onclick="lockPin('8')">8<div class="sub">TUV</div></button>
+    <button class="numpad-btn" onclick="lockPin('9')">9<div class="sub">WXYZ</div></button>
+    <button class="numpad-btn" id="bioBtn" onclick="tryBiometric()" style="font-size:22px">☝️</button>
+    <button class="numpad-btn" onclick="lockPin('0')">0</button>
+    <button class="numpad-btn del" onclick="lockPinDel()">⌫</button>
+  </div>
+  <p class="lock-hint" id="lockHint">Enter PIN or use biometrics</p>
+</div>
+
+<!-- MAIN APP -->
+<div class="screen" id="appScreen">
+  <div class="app-content">
+
+    <!-- DASHBOARD PAGE -->
+    <div class="page" id="dashPage">
+      <div class="page-header" style="padding-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div class="page-title">Dashboard</div>
+            <div class="page-sub" id="dashDate"></div>
+          </div>
+          <button onclick="lockApp()" style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 12px;color:var(--muted);cursor:pointer;font-size:13px;font-family:var(--font-ui)">🔒 Lock</button>
+        </div>
+      </div>
+      <div class="stats-grid" id="statsGrid"></div>
+      <div class="section-title">CATEGORIES</div>
+      <div class="cat-chips" id="dashCatChips"></div>
+      <div class="section-title">RECENT ACCOUNTS</div>
+      <div class="recent-list" id="recentList"></div>
+    </div>
+
+    <!-- VAULT PAGE -->
+    <div class="page" id="vaultPage">
+      <div class="page-header">
+        <div class="page-title">Vault</div>
+        <div class="page-sub" id="vaultCount"></div>
+      </div>
+      <div class="search-wrap">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input class="search-input" id="searchInput" placeholder="Search accounts..." oninput="renderVault()">
+      </div>
+      <div class="vault-list" id="vaultList"></div>
+    </div>
+
+    <!-- CATEGORIES PAGE -->
+    <div class="page" id="catsPage">
+      <div class="page-header">
+        <div class="page-title">Categories</div>
+        <div class="page-sub">Organize your accounts</div>
+      </div>
+      <div class="cats-list" id="catsList"></div>
+    </div>
+
+    <!-- SETTINGS PAGE -->
+    <div class="page" id="settingsPage">
+      <div class="page-header">
+        <div class="page-title">Settings</div>
+        <div class="page-sub">Vault & security options</div>
+      </div>
+      <div class="settings-list">
+        <div class="settings-section">Security</div>
+        <div class="setting-item" onclick="openChangePIN()">
+          <div class="setting-left">
+            <div class="setting-icon" style="background:rgba(124,106,247,0.2)">🔑</div>
+            <div class="setting-info"><h3>Change Master PIN</h3><p>Update your 6-digit PIN</p></div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="setting-item" onclick="toggleBioSetting(this)">
+          <div class="setting-left">
+            <div class="setting-icon" style="background:rgba(0,212,255,0.2)">☝️</div>
+            <div class="setting-info"><h3>Biometric Unlock</h3><p>Use fingerprint to unlock</p></div>
+          </div>
+          <div class="toggle" id="bioToggle"></div>
+        </div>
+        <div class="settings-section">Data</div>
+        <div class="setting-item" onclick="backupData()">
+          <div class="setting-left">
+            <div class="setting-icon" style="background:rgba(0,229,160,0.2)">⬆️</div>
+            <div class="setting-info"><h3>Backup Vault</h3><p>Save encrypted backup file</p></div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="setting-item" onclick="restoreData()">
+          <div class="setting-left">
+            <div class="setting-icon" style="background:rgba(255,179,71,0.2)">⬇️</div>
+            <div class="setting-info"><h3>Restore Vault</h3><p>Load from backup file</p></div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="setting-item" onclick="if(confirm('Reset ALL data? This cannot be undone!'))resetApp()">
+          <div class="setting-left">
+            <div class="setting-icon" style="background:rgba(255,77,109,0.2)">⚠️</div>
+            <div class="setting-info"><h3>Reset Vault</h3><p>Erase all data and start over</p></div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </div>
+        <div class="settings-section">About</div>
+        <div class="setting-item" style="cursor:default">
+          <div class="setting-left">
+            <div class="setting-icon" style="background:rgba(124,106,247,0.2)">🔐</div>
+            <div class="setting-info"><h3>VaultKey v1.0</h3><p>100% offline • No cloud • Your data only</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end app-content -->
+
+  <!-- FAB -->
+  <button class="fab" id="fab" onclick="openAddDrawer()">+</button>
+
+  <!-- NAV BAR -->
+  <nav class="nav-bar">
+    <button class="nav-btn active" id="nav-dash" onclick="switchPage('dash')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </button>
+    <button class="nav-btn" id="nav-vault" onclick="switchPage('vault')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Vault
+    </button>
+    <button class="nav-btn" id="nav-cats" onclick="switchPage('cats')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>
+      Categories
+    </button>
+    <button class="nav-btn" id="nav-settings" onclick="switchPage('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </button>
+  </nav>
+</div>
+
+<!-- ADD/EDIT ACCOUNT DRAWER -->
+<div class="overlay" id="addOverlay" onclick="closeDrawer('addOverlay','addDrawer')"></div>
+<div class="drawer" id="addDrawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <div class="drawer-title" id="addDrawerTitle">Add Account</div>
+    <button class="drawer-close" onclick="closeDrawer('addOverlay','addDrawer')">✕</button>
+  </div>
+  <div class="drawer-body">
+    <input type="hidden" id="editId">
+    <div class="form-group">
+      <label class="form-label">Account Name *</label>
+      <input class="form-input" id="fName" placeholder="e.g. Gmail, Netflix...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Username / Email</label>
+      <input class="form-input" id="fUser" placeholder="your@email.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password *</label>
+      <div class="pw-wrap">
+        <input class="form-input" id="fPass" type="password" placeholder="Password" oninput="updateStrength()">
+        <button class="pw-toggle" onclick="togglePwVis('fPass',this)" type="button">👁</button>
+      </div>
+      <button class="gen-pw-btn" onclick="generatePassword()">✨ Generate strong password</button>
+      <div class="pw-strength" id="pwStrengthBar"></div>
+      <div class="pw-strength-label" id="pwStrengthLabel"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">URL / Website</label>
+      <input class="form-input" id="fUrl" placeholder="https://example.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <select class="form-select" id="fCat"></select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notes (optional)</label>
+      <textarea class="form-textarea" id="fNotes" placeholder="Any extra info..."></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="saveAccount()">💾 Save Account</button>
+    <button class="btn btn-danger" id="deleteBtn" onclick="deleteCurrentAccount()" style="display:none">🗑 Delete Account</button>
+  </div>
+</div>
+
+<!-- DETAIL DRAWER -->
+<div class="overlay" id="detailOverlay" onclick="closeDrawer('detailOverlay','detailDrawer')"></div>
+<div class="drawer" id="detailDrawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="acc-avatar" id="detailAvatar" style="width:40px;height:40px;border-radius:10px;font-size:20px;display:flex;align-items:center;justify-content:center"></div>
+      <div>
+        <div class="drawer-title" id="detailName"></div>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--font-mono)" id="detailCatBadge"></div>
+      </div>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer('detailOverlay','detailDrawer')">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div id="detailFields"></div>
+    <div class="detail-actions" style="margin-top:8px">
+      <button class="btn btn-ghost" style="flex:1" onclick="editFromDetail()">✏️ Edit</button>
+      <button class="btn btn-danger" style="flex:1" onclick="deleteFromDetail()">🗑 Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD CATEGORY DRAWER -->
+<div class="overlay" id="catOverlay" onclick="closeDrawer('catOverlay','catDrawer')"></div>
+<div class="drawer" id="catDrawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <div class="drawer-title">Add Category</div>
+    <button class="drawer-close" onclick="closeDrawer('catOverlay','catDrawer')">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="form-group">
+      <label class="form-label">Category Name *</label>
+      <input class="form-input" id="catName" placeholder="e.g. Gaming, Travel...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Emoji Icon *</label>
+      <input class="form-input" id="catEmoji" placeholder="🎮" maxlength="2">
+    </div>
+    <button class="btn btn-primary" onclick="saveCategory()">✅ Add Category</button>
+  </div>
+</div>
+
+<!-- CHANGE PIN DRAWER -->
+<div class="overlay" id="pinOverlay" onclick="closeDrawer('pinOverlay','pinDrawer')"></div>
+<div class="drawer" id="pinDrawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <div class="drawer-title">Change PIN</div>
+    <button class="drawer-close" onclick="closeDrawer('pinOverlay','pinDrawer')">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="form-group">
+      <label class="form-label">Current PIN</label>
+      <input class="form-input" id="curPin" type="password" inputmode="numeric" maxlength="6" placeholder="••••••">
+    </div>
+    <div class="form-group">
+      <label class="form-label">New PIN (6 digits)</label>
+      <input class="form-input" id="newPin1" type="password" inputmode="numeric" maxlength="6" placeholder="••••••">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Confirm New PIN</label>
+      <input class="form-input" id="newPin2" type="password" inputmode="numeric" maxlength="6" placeholder="••••••">
+    </div>
+    <button class="btn btn-primary" onclick="changePIN()">🔑 Update PIN</button>
+  </div>
+</div>
+
+<!-- FILE INPUT FOR RESTORE -->
+<input type="file" id="restoreFile" accept=".vk,.json" style="display:none" onchange="handleRestore(event)">
+
+<script>
+// ============================================================
+// STATE & INDEXEDDB STORAGE
+// ============================================================
+let state = {
+  accounts: [],
+  categories: [],
+  settings: { bioEnabled: false },
+  masterHash: null
+};
+
+let currentDetailId = null;
+let activeDashCat = 'all';
+let db = null;
+const DB_NAME = 'VaultKeyDB';
+const DB_VERSION = 1;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('vault')) {
+        d.createObjectStore('vault', { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function save() {
+  if (!db) return;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('vault', 'readwrite');
+    tx.objectStore('vault').put({ key: 'state', value: JSON.parse(JSON.stringify(state)) });
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadFromDB() {
+  if (!db) return;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('vault', 'readonly');
+    const req = tx.objectStore('vault').get('state');
+    req.onsuccess = () => {
+      if (req.result && req.result.value) {
+        state = { ...state, ...req.result.value };
+      }
+      resolve();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function requestPersistence() {
+  if (navigator.storage && navigator.storage.persist) {
+    await navigator.storage.persist();
+  }
+}
+
+// ============================================================
+// SIMPLE HASH (SHA-256 via Web Crypto)
+// ============================================================
+async function hashPin(pin) {
+  const buf = new TextEncoder().encode(pin + 'vaultkey_salt_2024');
+  const hash = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function hashPinSync(pin) {
+  // Simple fallback (not used if crypto available)
+  let h = 0;
+  for (let i = 0; i < pin.length; i++) h = ((h << 5) - h) + pin.charCodeAt(i) | 0;
+  return 'simple_' + Math.abs(h).toString(16);
+}
+
+// ============================================================
+// SETUP PIN
+// ============================================================
+let setupStep = 0; // 0 = choose, 1 = confirm
+let setupFirst = '';
+let setupCurrent = '';
+
+function setupPin(d) {
+  if (setupCurrent.length >= 6) return;
+  setupCurrent += d;
+  updateSetupDots();
+  if (setupCurrent.length === 6) {
+    if (setupStep === 0) {
+      setupFirst = setupCurrent;
+      setupCurrent = '';
+      setupStep = 1;
+      document.getElementById('setupLabel').textContent = 'CONFIRM YOUR PIN';
+      clearDots('setupDots');
+    } else {
+      if (setupCurrent === setupFirst) {
+        confirmSetup();
+      } else {
+        errorDots('setupDots');
+        setTimeout(() => {
+          setupCurrent = ''; setupStep = 0; setupFirst = '';
+          document.getElementById('setupLabel').textContent = 'CHOOSE A 6-DIGIT MASTER PIN';
+          clearDots('setupDots');
+        }, 700);
+      }
+    }
+  }
+}
+function setupPinDel() {
+  setupCurrent = setupCurrent.slice(0,-1);
+  updateSetupDots();
+}
+function updateSetupDots() {
+  const dots = document.querySelectorAll('#setupDots .pin-dot');
+  dots.forEach((d,i) => d.classList.toggle('filled', i < setupCurrent.length));
+}
+async function confirmSetup() {
+  const hash = await hashPin(setupFirst);
+  state.masterHash = hash;
+  // Add default categories
+  state.categories = [
+    {id:'cat_social',name:'Social',emoji:'🌐',color:'social'},
+    {id:'cat_finance',name:'Finance',emoji:'💰',color:'finance'},
+    {id:'cat_work',name:'Work',emoji:'💼',color:'work'},
+    {id:'cat_email',name:'Email',emoji:'📧',color:'email'},
+    {id:'cat_shopping',name:'Shopping',emoji:'🛍',color:'shopping'},
+    {id:'cat_other',name:'Other',emoji:'🔒',color:'other'},
+  ];
+  await save();
+  setTimeout(() => showScreen('appScreen'), 50);
+}
+async function attemptLogin(pin) {
+  const hash = await hashPin(pin);
+  return hash === state.masterHash;
+}
+
+// ============================================================
+// LOCK SCREEN
+// ============================================================
+let lockCurrent = '';
+let lockAttempts = 0;
+
+function lockPin(d) {
+  if (lockCurrent.length >= 6) return;
+  lockCurrent += d;
+  updateLockDots();
+  if (lockCurrent.length === 6) {
+    attemptLogin(lockCurrent).then(ok => {
+      if (ok) {
+        lockAttempts = 0;
+        // Small delay ensures any pending IndexedDB ops are done
+        setTimeout(() => showScreen('appScreen'), 50);
+      } else {
+        lockAttempts++;
+        errorDots('lockDots');
+        document.getElementById('lockHint').textContent = `Wrong PIN (${lockAttempts} attempt${lockAttempts>1?'s':''})`;
+        setTimeout(() => { lockCurrent = ''; clearDots('lockDots'); }, 700);
+      }
+    });
+  }
+}
+function lockPinDel() {
+  lockCurrent = lockCurrent.slice(0,-1);
+  updateLockDots();
+}
+function updateLockDots() {
+  const dots = document.querySelectorAll('#lockDots .pin-dot');
+  dots.forEach((d,i) => d.classList.toggle('filled', i < lockCurrent.length));
+}
+function lockApp() {
+  lockCurrent = '';
+  clearDots('lockDots');
+  document.getElementById('lockHint').textContent = 'Enter PIN or use biometrics';
+  showScreen('lockScreen');
+}
+
+// ============================================================
+// BIOMETRIC
+// ============================================================
+async function tryBiometric() {
+  if (!window.PublicKeyCredential) { toast('Biometrics not supported','error'); return; }
+  try {
+    const result = await navigator.credentials.get({
+      publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rpId: location.hostname || 'localhost',
+        allowCredentials: [],
+        userVerification: 'required',
+        timeout: 30000
+      }
+    });
+    if (result) {
+      setTimeout(() => showScreen('appScreen'), 50);
+    }
+  } catch(e) {
+    if (e.name === 'NotAllowedError') { toast('Biometric cancelled','error'); }
+    else { toast('Use PIN instead','error'); }
+  }
+}
+function toggleBioSetting(el) {
+  state.settings.bioEnabled = !state.settings.bioEnabled;
+  updateBioToggle();
+  save();
+  toast(state.settings.bioEnabled ? 'Biometrics enabled' : 'Biometrics disabled', 'success');
+}
+function updateBioToggle() {
+  const t = document.getElementById('bioToggle');
+  if (t) t.classList.toggle('on', !!state.settings.bioEnabled);
+  const bioBtn = document.getElementById('bioBtn');
+  if (bioBtn) bioBtn.style.display = state.settings.bioEnabled ? '' : 'none';
+}
+
+// ============================================================
+// DOT HELPERS
+// ============================================================
+function clearDots(id) {
+  document.querySelectorAll(`#${id} .pin-dot`).forEach(d => { d.classList.remove('filled','error'); });
+}
+function errorDots(id) {
+  document.querySelectorAll(`#${id} .pin-dot`).forEach(d => { d.classList.remove('filled'); d.classList.add('error'); });
+  setTimeout(() => document.querySelectorAll(`#${id} .pin-dot`).forEach(d => d.classList.remove('error')), 700);
+}
+
+// ============================================================
+// SCREEN MANAGEMENT
+// ============================================================
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  // Always re-render dashboard when app becomes visible
+  if (id === 'appScreen') {
+    switchPage(currentPage || 'dash');
+  }
+}
+
+// ============================================================
+// PAGE NAVIGATION
+// ============================================================
+let currentPage = 'dash';
+function switchPage(name) {
+  currentPage = name;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(name+'Page').classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-'+name).classList.add('active');
+  const fab = document.getElementById('fab');
+  if (name === 'cats') { fab.textContent = '+'; fab.onclick = () => openAddCatDrawer(); fab.style.display = ''; }
+  else if (name === 'vault') { fab.textContent = '+'; fab.onclick = () => openAddDrawer(); fab.style.display = ''; }
+  else if (name === 'dash') { fab.textContent = '+'; fab.onclick = () => openAddDrawer(); fab.style.display = ''; }
+  else { fab.style.display = 'none'; }
+  // Defer render slightly so DOM is ready
+  setTimeout(() => {
+    if (name === 'dash') renderDash();
+    if (name === 'vault') renderVault();
+    if (name === 'cats') renderCats();
+    if (name === 'settings') updateBioToggle();
+  }, 30);
+}
+
+// ============================================================
+// RENDER ALL
+// ============================================================
+function renderAll() {
+  renderDash();
+  renderVault();
+  renderCats();
+  updateBioToggle();
+  const now = new Date();
+  document.getElementById('dashDate').textContent = now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}).toUpperCase();
+}
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+function renderDash() {
+  const total = state.accounts.length;
+  const cats = state.categories.length;
+  const recent = [...state.accounts].sort((a,b)=>(b.updated||0)-(a.updated||0)).slice(0,5);
+  // Stats
+  const catCounts = {};
+  state.categories.forEach(c => catCounts[c.id] = 0);
+  state.accounts.forEach(a => { if(catCounts[a.catId] !== undefined) catCounts[a.catId]++; });
+  const topCat = state.categories.sort((a,b)=>(catCounts[b.id]||0)-(catCounts[a.id]||0))[0];
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card blue"><div class="stat-num">${total}</div><div class="stat-label">Total Accounts</div></div>
+    <div class="stat-card pink"><div class="stat-num">${cats}</div><div class="stat-label">Categories</div></div>
+    <div class="stat-card cyan" style="grid-column:span 2"><div class="stat-num" style="font-size:20px">${topCat ? topCat.emoji+' '+topCat.name : '—'}</div><div class="stat-label">Most Used Category ${topCat ? '('+catCounts[topCat.id]+' accounts)' : ''}</div></div>
+  `;
+  // Cat chips
+  let chips = `<div class="cat-chip ${activeDashCat==='all'?'active':''}" onclick="filterDash('all')">All</div>`;
+  state.categories.forEach(c => {
+    chips += `<div class="cat-chip ${activeDashCat===c.id?'active':''}" onclick="filterDash('${c.id}')">${c.emoji} ${c.name}</div>`;
+  });
+  document.getElementById('dashCatChips').innerHTML = chips;
+  // Recent
+  let filtered = activeDashCat === 'all' ? recent : recent.filter(a=>a.catId===activeDashCat);
+  if (!filtered.length) {
+    document.getElementById('recentList').innerHTML = `<div class="empty-state"><div class="icon">🔐</div><p>No accounts yet. Tap + to add one.</p></div>`;
+  } else {
+    document.getElementById('recentList').innerHTML = filtered.map(a => accCardHTML(a)).join('');
+  }
+}
+function filterDash(catId) {
+  activeDashCat = catId;
+  renderDash();
+}
+
+// ============================================================
+// VAULT
+// ============================================================
+function renderVault() {
+  const q = (document.getElementById('searchInput')?.value||'').toLowerCase();
+  let list = state.accounts.filter(a =>
+    !q || a.name.toLowerCase().includes(q) || (a.user||'').toLowerCase().includes(q) || (a.url||'').toLowerCase().includes(q)
+  );
+  list.sort((a,b) => a.name.localeCompare(b.name));
+  document.getElementById('vaultCount').textContent = `${list.length} account${list.length!==1?'s':''}`;
+  document.getElementById('vaultList').innerHTML = list.length
+    ? list.map(a => accCardHTML(a)).join('')
+    : `<div class="empty-state"><div class="icon">🔐</div><p>${q?'No results found':'Your vault is empty. Tap + to add your first account.'}</p></div>`;
+}
+
+// ============================================================
+// ACCOUNT CARD HTML
+// ============================================================
+function accCardHTML(a) {
+  const cat = state.categories.find(c=>c.id===a.catId) || {name:'Other',emoji:'🔒',color:'other'};
+  return `<div class="acc-card" onclick="openDetail('${a.id}')">
+    <div class="acc-avatar avatar-${cat.color}">${cat.emoji}</div>
+    <div class="acc-info">
+      <div class="acc-name">${escHtml(a.name)}</div>
+      <div class="acc-url">${escHtml(a.url||a.user||'—')}</div>
+    </div>
+    <div class="acc-right">
+      <span class="acc-cat cat-${cat.color}">${cat.name}</span>
+    </div>
+  </div>`;
+}
+function escHtml(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================
+// ADD / EDIT ACCOUNT
+// ============================================================
+function openAddDrawer(editId) {
+  // Guard: if called with a DOM Event (e.g. from onclick), treat as new account
+  if (editId && typeof editId !== 'string') editId = null;
+  populateCatSelect();
+  document.getElementById('editId').value = editId || '';
+  document.getElementById('addDrawerTitle').textContent = editId ? 'Edit Account' : 'Add Account';
+  document.getElementById('deleteBtn').style.display = editId ? '' : 'none';
+  if (editId) {
+    const a = state.accounts.find(x=>x.id===editId);
+    if (a) {
+      document.getElementById('fName').value = a.name || '';
+      document.getElementById('fUser').value = a.user || '';
+      document.getElementById('fPass').value = a.pass || '';
+      document.getElementById('fUrl').value = a.url || '';
+      document.getElementById('fCat').value = a.catId || '';
+      document.getElementById('fNotes').value = a.notes || '';
+    }
+  } else {
+    ['fName','fUser','fPass','fUrl','fNotes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('pwStrengthBar').style.background = '';
+    document.getElementById('pwStrengthLabel').textContent = '';
+  }
+  openDrawer('addOverlay','addDrawer');
+}
+function populateCatSelect() {
+  const sel = document.getElementById('fCat');
+  sel.innerHTML = state.categories.map(c => `<option value="${c.id}">${c.emoji} ${c.name}</option>`).join('');
+}
+async function saveAccount() {
+  const name = document.getElementById('fName').value.trim();
+  const pass = document.getElementById('fPass').value.trim();
+  if (!name) { toast('Account name is required','error'); return; }
+  if (!pass) { toast('Password is required','error'); return; }
+  const editId = document.getElementById('editId').value;
+  const acc = {
+    id: editId || 'acc_'+Date.now()+'_'+Math.random().toString(36).slice(2),
+    name, pass,
+    user: document.getElementById('fUser').value.trim(),
+    url: document.getElementById('fUrl').value.trim(),
+    catId: document.getElementById('fCat').value,
+    notes: document.getElementById('fNotes').value.trim(),
+    updated: Date.now()
+  };
+  if (editId) {
+    const idx = state.accounts.findIndex(x=>x.id===editId);
+    if (idx !== -1) state.accounts[idx] = acc;
+  } else {
+    state.accounts.push(acc);
+  }
+  await save();
+  // Always clear the form fully after save so next open is fresh
+  document.getElementById('editId').value = '';
+  ['fName','fUser','fPass','fUrl','fNotes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('pwStrengthBar').style.background = '';
+  document.getElementById('pwStrengthLabel').textContent = '';
+  closeDrawer('addOverlay','addDrawer');
+  renderAll();
+  toast(editId ? 'Account updated' : 'Account saved', 'success');
+}
+async function deleteCurrentAccount() {
+  const id = document.getElementById('editId').value;
+  if (!id) return;
+  if (!confirm('Delete this account?')) return;
+  state.accounts = state.accounts.filter(a=>a.id!==id);
+  await save();
+  closeDrawer('addOverlay','addDrawer');
+  renderAll();
+  toast('Account deleted','error');
+}
+
+// ============================================================
+// DETAIL VIEW
+// ============================================================
+let detailPassVisible = false;
+function openDetail(id) {
+  const a = state.accounts.find(x=>x.id===id);
+  if (!a) return;
+  currentDetailId = id;
+  detailPassVisible = false;
+  const cat = state.categories.find(c=>c.id===a.catId) || {name:'Other',emoji:'🔒',color:'other'};
+  document.getElementById('detailAvatar').textContent = cat.emoji;
+  document.getElementById('detailAvatar').className = `acc-avatar avatar-${cat.color}`;
+  document.getElementById('detailName').textContent = a.name;
+  document.getElementById('detailCatBadge').innerHTML = `<span class="acc-cat cat-${cat.color}">${cat.name}</span>`;
+
+  let fields = '';
+  if (a.user) fields += detailField('Username / Email', a.user, 'user_'+id);
+  fields += `<div class="detail-field">
+    <div style="flex:1"><div class="detail-field-label">Password</div>
+    <div class="detail-field-val masked" id="detailPass_${id}">••••••••</div></div>
+    <button class="copy-btn" onclick="toggleDetailPass('${id}','${escAttr(a.pass)}')" id="detailPassBtn_${id}">Show</button>
+    <button class="copy-btn" onclick="copyToClipboard('${escAttr(a.pass)}','Password')">Copy</button>
+  </div>`;
+  if (a.url) fields += detailField('URL', a.url, 'url_'+id);
+  if (a.notes) fields += `<div class="detail-field"><div><div class="detail-field-label">Notes</div><div class="detail-field-val" style="font-family:var(--font-ui)">${escHtml(a.notes)}</div></div></div>`;
+  fields += `<div style="font-size:11px;color:var(--muted);font-family:var(--font-mono);text-align:center;padding-top:8px">Updated: ${new Date(a.updated).toLocaleString()}</div>`;
+  document.getElementById('detailFields').innerHTML = fields;
+  openDrawer('detailOverlay','detailDrawer');
+}
+function detailField(label, val, id) {
+  return `<div class="detail-field">
+    <div style="flex:1"><div class="detail-field-label">${label}</div><div class="detail-field-val">${escHtml(val)}</div></div>
+    <button class="copy-btn" onclick="copyToClipboard('${escAttr(val)}','${label}')">Copy</button>
+  </div>`;
+}
+function escAttr(s) { return (s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+function toggleDetailPass(id, pass) {
+  detailPassVisible = !detailPassVisible;
+  const el = document.getElementById('detailPass_'+id);
+  const btn = document.getElementById('detailPassBtn_'+id);
+  if (el) { el.textContent = detailPassVisible ? pass : '••••••••'; el.classList.toggle('masked', !detailPassVisible); }
+  if (btn) btn.textContent = detailPassVisible ? 'Hide' : 'Show';
+}
+function editFromDetail() {
+  closeDrawer('detailOverlay','detailDrawer');
+  setTimeout(() => openAddDrawer(currentDetailId), 300);
+}
+async function deleteFromDetail() {
+  if (!confirm('Delete this account?')) return;
+  state.accounts = state.accounts.filter(a=>a.id!==currentDetailId);
+  await save();
+  closeDrawer('detailOverlay','detailDrawer');
+  renderAll();
+  toast('Account deleted','error');
+}
+
+// ============================================================
+// COPY
+// ============================================================
+function copyToClipboard(text, label) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => toast(label+' copied!','success'));
+  } else {
+    const el = document.createElement('textarea');
+    el.value = text; document.body.appendChild(el); el.select();
+    document.execCommand('copy'); document.body.removeChild(el);
+    toast(label+' copied!','success');
+  }
+}
+
+// ============================================================
+// PASSWORD GENERATOR & STRENGTH
+// ============================================================
+function generatePassword() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
+  let pw = '';
+  for (let i = 0; i < 20; i++) pw += chars[Math.floor(Math.random()*chars.length)];
+  const inp = document.getElementById('fPass');
+  inp.value = pw; inp.type = 'text';
+  updateStrength();
+  toast('Password generated!','success');
+  setTimeout(() => inp.type = 'password', 2000);
+}
+function togglePwVis(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  btn.textContent = inp.type === 'password' ? '👁' : '🙈';
+}
+function updateStrength() {
+  const pw = document.getElementById('fPass').value;
+  let score = 0;
+  if (pw.length >= 8) score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  const labels = ['','Weak','Fair','Good','Strong','Very Strong'];
+  const colors = ['','var(--danger)','var(--warn)','#a8d800','var(--success)','var(--accent3)'];
+  const bar = document.getElementById('pwStrengthBar');
+  const lbl = document.getElementById('pwStrengthLabel');
+  bar.style.background = pw ? `linear-gradient(to right, ${colors[score]}, ${colors[score]} ${score*20}%, var(--border) ${score*20}%)` : '';
+  lbl.textContent = pw ? labels[score] : '';
+  lbl.style.color = colors[score];
+}
+
+// ============================================================
+// CATEGORIES
+// ============================================================
+function renderCats() {
+  const counts = {};
+  state.accounts.forEach(a => { counts[a.catId] = (counts[a.catId]||0)+1; });
+  const html = state.categories.map(c => `
+    <div class="cat-item">
+      <div class="cat-emoji">${c.emoji}</div>
+      <div class="cat-item-name">${escHtml(c.name)}</div>
+      <div class="cat-count">${counts[c.id]||0} accounts</div>
+      ${!['cat_social','cat_finance','cat_work','cat_email','cat_shopping','cat_other'].includes(c.id)
+        ? `<button class="cat-del" onclick="deleteCat('${c.id}')">🗑</button>` : ''}
+    </div>`).join('');
+  document.getElementById('catsList').innerHTML = html ||
+    '<div class="empty-state"><p>No categories yet</p></div>';
+}
+function openAddCatDrawer() {
+  document.getElementById('catName').value = '';
+  document.getElementById('catEmoji').value = '';
+  openDrawer('catOverlay','catDrawer');
+}
+async function saveCategory() {
+  const name = document.getElementById('catName').value.trim();
+  const emoji = document.getElementById('catEmoji').value.trim() || '📁';
+  if (!name) { toast('Category name required','error'); return; }
+  const id = 'cat_'+Date.now();
+  state.categories.push({id, name, emoji, color:'other'});
+  await save();
+  closeDrawer('catOverlay','catDrawer');
+  renderCats();
+  toast('Category added!','success');
+}
+function deleteCat(id) {
+  if (state.accounts.some(a=>a.catId===id)) { toast("Can't delete — has accounts",'error'); return; }
+  if (!confirm('Delete this category?')) return;
+  state.categories = state.categories.filter(c=>c.id!==id);
+  save();
+  renderCats();
+  toast('Category deleted','success');
+}
+
+// ============================================================
+// BACKUP / RESTORE
+// ============================================================
+function backupData() {
+  const payload = {
+    version: 1,
+    exported: new Date().toISOString(),
+    vaultkey: true,
+    data: state
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `vaultkey_backup_${new Date().toISOString().split('T')[0]}.vk`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Backup saved!','success');
+}
+function restoreData() {
+  document.getElementById('restoreFile').click();
+}
+function handleRestore(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const payload = JSON.parse(e.target.result);
+      if (!payload.vaultkey) { toast('Invalid backup file','error'); return; }
+      if (!confirm('Restore will replace ALL current data. Continue?')) return;
+      state = payload.data;
+      save();
+      renderAll();
+      toast('Vault restored!','success');
+    } catch(err) { toast('Could not read file','error'); }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ============================================================
+// CHANGE PIN
+// ============================================================
+function openChangePIN() {
+  ['curPin','newPin1','newPin2'].forEach(id => document.getElementById(id).value = '');
+  openDrawer('pinOverlay','pinDrawer');
+}
+async function changePIN() {
+  const cur = document.getElementById('curPin').value.trim();
+  const n1 = document.getElementById('newPin1').value.trim();
+  const n2 = document.getElementById('newPin2').value.trim();
+  if (!await attemptLogin(cur)) { toast('Current PIN incorrect','error'); return; }
+  if (n1.length < 6) { toast('PIN must be 6 digits','error'); return; }
+  if (n1 !== n2) { toast('PINs do not match','error'); return; }
+  state.masterHash = await hashPin(n1);
+  save();
+  closeDrawer('pinOverlay','pinDrawer');
+  toast('PIN updated!','success');
+}
+
+// ============================================================
+// RESET
+// ============================================================
+async function resetApp() {
+  if (!db) { location.reload(); return; }
+  return new Promise((resolve) => {
+    const tx = db.transaction('vault', 'readwrite');
+    tx.objectStore('vault').clear();
+    tx.oncomplete = () => { location.reload(); resolve(); };
+  });
+}
+
+// ============================================================
+// DRAWER HELPERS
+// ============================================================
+function openDrawer(overlayId, drawerId) {
+  document.getElementById(overlayId).classList.add('active');
+  document.getElementById(drawerId).classList.add('active');
+}
+function closeDrawer(overlayId, drawerId) {
+  document.getElementById(overlayId).classList.remove('active');
+  document.getElementById(drawerId).classList.remove('active');
+  // If closing the add/edit drawer, always wipe the form
+  if (drawerId === 'addDrawer') {
+    document.getElementById('editId').value = '';
+    ['fName','fUser','fPass','fUrl','fNotes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('pwStrengthBar').style.background = '';
+    document.getElementById('pwStrengthLabel').textContent = '';
+  }
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+let toastTimer;
+function toast(msg, type='') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ============================================================
+// INIT — async startup using IndexedDB
+// ============================================================
+async function init() {
+  try {
+    await openDB();
+    await loadFromDB();
+    await requestPersistence();
+  } catch(e) {
+    console.warn('IndexedDB init failed, app may not persist:', e);
+  }
+
+  document.getElementById('dashDate').textContent =
+    new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}).toUpperCase();
+
+  if (!state.masterHash) {
+    showScreen('setupScreen');
+  } else {
+    showScreen('lockScreen');
+    if (state.settings.bioEnabled) {
+      document.getElementById('bioBtn').style.display = '';
+      setTimeout(tryBiometric, 500);
+    } else {
+      document.getElementById('bioBtn').style.display = 'none';
+    }
+  }
+}
+
+init();
+</script>
+</body>
+</html>
