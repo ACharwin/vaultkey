@@ -29,6 +29,7 @@
     });
   }
 </script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
@@ -210,6 +211,17 @@
   .cat-del { background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; font-size: 18px; }
 
 
+
+  /* BACKUP CHOICE */
+  .backup-choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+  .backup-choice-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 14px; padding: 20px 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer; transition: all 0.2s; }
+  .backup-choice-btn:active { transform: scale(0.96); border-color: var(--accent); }
+  .backup-choice-btn .choice-icon { font-size: 32px; }
+  .backup-choice-btn .choice-label { font-size: 13px; font-weight: 700; text-align: center; }
+  .backup-choice-btn .choice-sub { font-size: 10px; color: var(--muted); text-align: center; line-height: 1.4; }
+  .backup-choice-btn.gdrive { border-color: rgba(66,133,244,0.4); }
+  .backup-choice-btn.gdrive:active { border-color: #4285f4; }
+
   /* CUSTOM DIALOG */
   .dialog-box { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9); background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 28px 24px 20px; z-index: 200; width: calc(100% - 48px); max-width: 340px; opacity: 0; pointer-events: none; transition: all 0.25s cubic-bezier(0.34,1.56,0.64,1); }
   .dialog-box.active { opacity: 1; pointer-events: all; transform: translate(-50%, -50%) scale(1); }
@@ -376,14 +388,14 @@
         <div class="setting-item" onclick="backupData()">
           <div class="setting-left">
             <div class="setting-icon" style="background:rgba(0,229,160,0.2)">⬆️</div>
-            <div class="setting-info"><h3>Backup Vault</h3><p>Save encrypted backup file</p></div>
+            <div class="setting-info"><h3>Backup Vault</h3><p>Local device or Google Drive</p></div>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
         </div>
         <div class="setting-item" onclick="restoreData()">
           <div class="setting-left">
             <div class="setting-icon" style="background:rgba(255,179,71,0.2)">⬇️</div>
-            <div class="setting-info"><h3>Restore Vault</h3><p>Load from backup file</p></div>
+            <div class="setting-info"><h3>Restore Vault</h3><p>From device or Google Drive</p></div>
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
         </div>
@@ -558,8 +570,82 @@
   <div class="dialog-actions" id="dialogActions"></div>
 </div>
 
+
+<!-- BACKUP CHOICE DRAWER -->
+<div class="overlay" id="backupOverlay" onclick="closeDrawer('backupOverlay','backupDrawer')"></div>
+<div class="drawer" id="backupDrawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <div class="drawer-title">Backup Vault</div>
+    <button class="drawer-close" onclick="closeDrawer('backupOverlay','backupDrawer')">✕</button>
+  </div>
+  <div class="drawer-body" style="gap:12px">
+    <p style="font-size:13px;color:var(--muted);text-align:center">Choose where to save your encrypted backup</p>
+    <div class="backup-choice-grid">
+      <div class="backup-choice-btn" onclick="backupLocal()">
+        <div class="choice-icon">📱</div>
+        <div class="choice-label">Local Storage</div>
+        <div class="choice-sub">Download .vke file to your device</div>
+      </div>
+      <div class="backup-choice-btn gdrive" onclick="backupGDrive()">
+        <div class="choice-icon">☁️</div>
+        <div class="choice-label">Google Drive</div>
+        <div class="choice-sub">Save to VaultKey/Backups in your Drive</div>
+      </div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start">
+      <span style="font-size:16px">🔐</span>
+      <p style="font-size:11px;color:var(--muted);line-height:1.6">Backup is encrypted with <strong style="color:var(--text)">AES-256</strong> using your Master PIN. Only you can restore it.</p>
+    </div>
+  </div>
+</div>
+
+
+<!-- RESTORE CHOICE DRAWER -->
+<div class="overlay" id="restoreOverlay" onclick="closeDrawer('restoreOverlay','restoreDrawer')"></div>
+<div class="drawer" id="restoreDrawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <div class="drawer-title">Restore Vault</div>
+    <button class="drawer-close" onclick="closeDrawer('restoreOverlay','restoreDrawer')">✕</button>
+  </div>
+  <div class="drawer-body" style="gap:12px">
+    <p style="font-size:13px;color:var(--muted);text-align:center">Choose where to restore your backup from</p>
+    <div class="backup-choice-grid">
+      <div class="backup-choice-btn" onclick="restoreLocal()">
+        <div class="choice-icon">📱</div>
+        <div class="choice-label">Local File</div>
+        <div class="choice-sub">Pick a .vke or .vk file from your device</div>
+      </div>
+      <div class="backup-choice-btn gdrive" onclick="restoreGDrive()">
+        <div class="choice-icon">☁️</div>
+        <div class="choice-label">Google Drive</div>
+        <div class="choice-sub">Pick from VaultKey/Backups in your Drive</div>
+      </div>
+    </div>
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;gap:10px;align-items:flex-start">
+      <span style="font-size:16px">⚠️</span>
+      <p style="font-size:11px;color:var(--muted);line-height:1.6">Restoring will <strong style="color:var(--text)">replace all current data</strong>. Make sure you have a backup of your current vault first.</p>
+    </div>
+  </div>
+</div>
+
+<!-- GDRIVE FILE PICKER DRAWER -->
+<div class="overlay" id="gdrivePickerOverlay" onclick="closeDrawer('gdrivePickerOverlay','gdrivePickerDrawer')"></div>
+<div class="drawer" id="gdrivePickerDrawer">
+  <div class="drawer-handle"></div>
+  <div class="drawer-header">
+    <div class="drawer-title">Select Backup</div>
+    <button class="drawer-close" onclick="closeDrawer('gdrivePickerOverlay','gdrivePickerDrawer')">✕</button>
+  </div>
+  <div class="drawer-body" style="gap:10px">
+    <p style="font-size:12px;color:var(--muted)">Found in VaultKey/Backups on your Google Drive:</p>
+    <div id="gdriveFileList" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+</div>
+
 <!-- FILE INPUT FOR RESTORE -->
-<input type="file" id="restoreFile" accept=".vk,.json" style="display:none" onchange="handleRestore(event)">
+<input type="file" id="restoreFile" accept=".vk,.vke,.json" style="display:none" onchange="handleRestore(event)">
 
 <script>
 // ============================================================
@@ -1149,51 +1235,386 @@ async function deleteCat(id) {
 // ============================================================
 // BACKUP / RESTORE
 // ============================================================
+// ============================================================
+// BACKUP — AES-256 ENCRYPTION + LOCAL / GDRIVE
+// ============================================================
+const GDRIVE_CLIENT_ID = '806018607920-98hnp33o378ighkr5bs80u5tbro9jrct.apps.googleusercontent.com';
+const GDRIVE_SCOPES = 'https://www.googleapis.com/auth/drive.file';
+
 function backupData() {
   if (state.accounts.length === 0) {
     toast('Nothing to backup — add some accounts first!', 'error');
     return;
   }
-  const payload = {
-    version: 1,
+  openDrawer('backupOverlay', 'backupDrawer');
+}
+
+// Derive AES-256 key from master PIN using PBKDF2
+async function deriveEncryptionKey(pin) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', enc.encode(pin), { name: 'PBKDF2' }, false, ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: enc.encode('vaultkey_gdrive_salt_v2'), iterations: 100000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+// Encrypt vault data with master PIN
+async function encryptVault() {
+  const pin_hash = state.masterHash;
+  // We use the raw PIN entered — ask user to confirm PIN for encryption
+  return new Promise((resolve) => {
+    // Use existing masterHash as encryption source (already derived from PIN)
+    resolve(pin_hash);
+  });
+}
+
+async function buildEncryptedPayload() {
+  // Ask user to enter PIN to encrypt backup
+  const { confirmed, input: pin } = await showDialog({
+    title: 'Encrypt Backup',
+    icon: '🔐',
+    message: 'Enter your Master PIN to encrypt the backup file.
+
+Without your PIN, the backup cannot be restored.',
+    type: 'info',
+    requireInput: true,
+    inputPlaceholder: 'Enter Master PIN',
+    inputHint: 'PIN is used as the encryption key',
+    confirmText: 'Encrypt & Save',
+    cancelText: 'Cancel'
+  });
+  if (!confirmed || !pin) return null;
+
+  // Verify PIN is correct
+  const hash = await hashPin(pin);
+  if (hash !== state.masterHash) {
+    toast('Incorrect PIN', 'error');
+    return null;
+  }
+
+  // Encrypt the data
+  const key = await deriveEncryptionKey(pin);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const enc = new TextEncoder();
+  const plaintext = JSON.stringify({
+    version: 2,
     exported: new Date().toISOString(),
     vaultkey: true,
+    accounts: state.accounts.length,
     data: state
+  });
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(plaintext));
+
+  return {
+    vke: true,
+    version: 2,
+    iv: Array.from(iv),
+    payload: Array.from(new Uint8Array(encrypted))
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {type: 'application/json'});
+}
+
+// LOCAL BACKUP
+async function backupLocal() {
+  closeDrawer('backupOverlay', 'backupDrawer');
+  const encrypted = await buildEncryptedPayload();
+  if (!encrypted) return;
+
+  const blob = new Blob([JSON.stringify(encrypted)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `vaultkey_backup_${new Date().toISOString().split('T')[0]}.vk`;
+  a.download = `vaultkey_backup_${new Date().toISOString().split('T')[0]}.vke`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  toast('Backup saved — ' + state.accounts.length + ' accounts exported!', 'success');
+  toast('Encrypted backup saved to device!', 'success');
+}
+
+// GOOGLE DRIVE BACKUP
+async function backupGDrive() {
+  closeDrawer('backupOverlay', 'backupDrawer');
+  const encrypted = await buildEncryptedPayload();
+  if (!encrypted) return;
+
+  toast('Connecting to Google Drive...', '');
+
+  // Use Google Identity Services token client
+  const tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GDRIVE_CLIENT_ID,
+    scope: GDRIVE_SCOPES,
+    callback: async (tokenResponse) => {
+      if (tokenResponse.error) {
+        toast('Google sign-in failed', 'error');
+        return;
+      }
+      const accessToken = tokenResponse.access_token;
+      try {
+        await uploadToGDrive(encrypted, accessToken);
+      } catch(e) {
+        toast('Upload failed: ' + e.message, 'error');
+      }
+    }
+  });
+  tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+async function uploadToGDrive(encrypted, accessToken) {
+  const fileName = `vaultkey_backup_${new Date().toISOString().split('T')[0]}.vke`;
+  const fileContent = JSON.stringify(encrypted);
+
+  // Step 1: Find or create VaultKey folder
+  toast('Finding VaultKey folder...', '');
+  let folderId = await getOrCreateGDriveFolder('VaultKey', 'root', accessToken);
+  let backupFolderId = await getOrCreateGDriveFolder('Backups', folderId, accessToken);
+
+  // Step 2: Upload file
+  toast('Uploading encrypted backup...', '');
+  const metadata = {
+    name: fileName,
+    mimeType: 'application/json',
+    parents: [backupFolderId]
+  };
+
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', new Blob([fileContent], { type: 'application/json' }));
+
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: form
+  });
+
+  if (!res.ok) throw new Error('Drive upload failed');
+  toast('✅ Backup saved to Google Drive → VaultKey/Backups!', 'success');
+}
+
+async function getOrCreateGDriveFolder(name, parentId, accessToken) {
+  // Search for existing folder
+  const query = `name='${name}' and mimeType='application/vnd.google-apps.folder' and '${parentId}' in parents and trashed=false`;
+  const searchRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const searchData = await searchRes.json();
+
+  if (searchData.files && searchData.files.length > 0) {
+    return searchData.files[0].id; // folder already exists
+  }
+
+  // Create folder
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      name,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: [parentId]
+    })
+  });
+  const folder = await createRes.json();
+  return folder.id;
 }
 function restoreData() {
-  document.getElementById('restoreFile').click();
+  openDrawer('restoreOverlay', 'restoreDrawer');
+}
+
+function restoreLocal() {
+  closeDrawer('restoreOverlay', 'restoreDrawer');
+  setTimeout(() => document.getElementById('restoreFile').click(), 300);
+}
+
+// -------------------------------------------------------
+// GDRIVE RESTORE
+// -------------------------------------------------------
+let gdriveRestoreToken = null;
+
+async function restoreGDrive() {
+  closeDrawer('restoreOverlay', 'restoreDrawer');
+  toast('Connecting to Google Drive...', '');
+
+  const tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GDRIVE_CLIENT_ID,
+    scope: GDRIVE_SCOPES,
+    callback: async (tokenResponse) => {
+      if (tokenResponse.error) {
+        toast('Google sign-in failed', 'error');
+        return;
+      }
+      gdriveRestoreToken = tokenResponse.access_token;
+      try {
+        await listGDriveBackups(gdriveRestoreToken);
+      } catch(e) {
+        toast('Could not list backups: ' + e.message, 'error');
+      }
+    }
+  });
+  tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+async function listGDriveBackups(accessToken) {
+  toast('Looking for backups...', '');
+
+  // Find VaultKey folder
+  const vkQuery = `name='VaultKey' and mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false`;
+  const vkRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(vkQuery)}&fields=files(id,name)`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const vkData = await vkRes.json();
+  if (!vkData.files || vkData.files.length === 0) {
+    toast('No VaultKey folder found on Google Drive', 'error');
+    return;
+  }
+
+  // Find Backups subfolder
+  const bkQuery = `name='Backups' and mimeType='application/vnd.google-apps.folder' and '${vkData.files[0].id}' in parents and trashed=false`;
+  const bkRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(bkQuery)}&fields=files(id,name)`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const bkData = await bkRes.json();
+  if (!bkData.files || bkData.files.length === 0) {
+    toast('No Backups folder found in VaultKey on Google Drive', 'error');
+    return;
+  }
+
+  // List .vke files
+  const filesQuery = `'${bkData.files[0].id}' in parents and trashed=false and name contains 'vaultkey_backup'`;
+  const filesRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(filesQuery)}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  const filesData = await filesRes.json();
+
+  if (!filesData.files || filesData.files.length === 0) {
+    toast('No backup files found in VaultKey/Backups', 'error');
+    return;
+  }
+
+  // Show file picker drawer
+  showGDriveFilePicker(filesData.files, accessToken);
+}
+
+function showGDriveFilePicker(files, accessToken) {
+  const list = document.getElementById('gdriveFileList');
+  list.innerHTML = files.map(f => {
+    const date = new Date(f.modifiedTime).toLocaleDateString('en-US', {
+      year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'
+    });
+    return `<div class="acc-card" onclick="downloadAndRestoreGDrive('${f.id}','${f.name}')">
+      <div class="acc-avatar avatar-other" style="width:44px;height:44px;border-radius:12px;font-size:20px;display:flex;align-items:center;justify-content:center">☁️</div>
+      <div class="acc-info">
+        <div class="acc-name">${escHtml(f.name)}</div>
+        <div class="acc-url">${date}</div>
+      </div>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    </div>`;
+  }).join('');
+
+  openDrawer('gdrivePickerOverlay', 'gdrivePickerDrawer');
+}
+
+async function downloadAndRestoreGDrive(fileId, fileName) {
+  closeDrawer('gdrivePickerOverlay', 'gdrivePickerDrawer');
+  toast('Downloading backup...', '');
+
+  try {
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: `Bearer ${gdriveRestoreToken}` } }
+    );
+    if (!res.ok) throw new Error('Download failed');
+    const text = await res.text();
+    const payload = JSON.parse(text);
+
+    // Reuse existing restore logic via a fake event
+    await processRestorePayload(payload);
+  } catch(e) {
+    toast('Failed to download backup: ' + e.message, 'error');
+  }
+}
+
+async function processRestorePayload(payload) {
+  // Encrypted .vke backup (version 2)
+  if (payload.vke === true && payload.version === 2) {
+    const { confirmed: step1 } = await showDialog({
+      title: 'Restore Encrypted Backup?',
+      message: 'This will replace ALL your current data.\n\nYour existing accounts will be overwritten.',
+      icon: '♻️',
+      type: 'warning',
+      confirmText: 'Continue',
+      cancelText: 'Cancel'
+    });
+    if (!step1) return;
+
+    const { confirmed: step2, input: pin } = await showDialog({
+      title: 'Decrypt Backup',
+      icon: '🔐',
+      message: 'Enter the Master PIN used when this backup was created.',
+      type: 'info',
+      requireInput: true,
+      inputPlaceholder: 'Enter Master PIN',
+      inputHint: 'This decrypts and restores your vault',
+      confirmText: 'Decrypt & Restore',
+      cancelText: 'Cancel'
+    });
+    if (!step2 || !pin) return;
+
+    try {
+      const key = await deriveEncryptionKey(pin);
+      const iv = new Uint8Array(payload.iv);
+      const data = new Uint8Array(payload.payload);
+      const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+      const parsed = JSON.parse(new TextDecoder().decode(decrypted));
+      if (!parsed.vaultkey) { toast('Invalid backup contents', 'error'); return; }
+      state = parsed.data;
+      await save();
+      renderAll();
+      toast('Vault restored — ' + state.accounts.length + ' accounts loaded!', 'success');
+    } catch(e) {
+      toast('Wrong PIN — could not decrypt backup', 'error');
+    }
+    return;
+  }
+
+  // Legacy .vk backup
+  if (payload.vaultkey) {
+    const { confirmed } = await showDialog({
+      title: 'Restore Vault?',
+      message: 'This will replace ALL your current data.\n\nYour existing accounts will be overwritten.',
+      icon: '♻️',
+      type: 'warning',
+      confirmText: 'Restore',
+      cancelText: 'Cancel'
+    });
+    if (!confirmed) return;
+    state = payload.data;
+    await save();
+    renderAll();
+    toast('Vault restored!', 'success');
+    return;
+  }
+
+  toast('Invalid backup file', 'error');
 }
 function handleRestore(event) {
   const file = event.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
       const payload = JSON.parse(e.target.result);
-      if (!payload.vaultkey) { toast('Invalid backup file','error'); return; }
-      const { confirmed: restoreConfirmed } = await showDialog({
-        title: 'Restore Vault?',
-        message: 'This will replace ALL your current data\nwith the backup file contents.\n\nYour existing accounts will be overwritten.',
-        icon: '♻️',
-        type: 'warning',
-        confirmText: 'Restore',
-        cancelText: 'Cancel'
-      });
-      if (!restoreConfirmed) return;
-      state = payload.data;
-      save();
-      renderAll();
-      toast('Vault restored!','success');
-    } catch(err) { toast('Could not read file','error'); }
+      await processRestorePayload(payload);
+    } catch(err) { toast('Could not read file', 'error'); }
   };
   reader.readAsText(file);
   event.target.value = '';
