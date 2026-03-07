@@ -410,7 +410,7 @@
         <div class="setting-item" style="cursor:default">
           <div class="setting-left">
             <div class="setting-icon" style="background:rgba(124,106,247,0.2)">🔐</div>
-            <div class="setting-info"><h3>VaultKey v1.5</h3><p>Offline • AES-256 encrypted backups • GDrive sync</p></div>
+            <div class="setting-info"><h3>VaultKey v1.6</h3><p>Offline • AES-256 encrypted backups • GDrive sync</p></div>
           </div>
         </div>
       </div>
@@ -1282,6 +1282,7 @@ async function buildEncryptedPayload() {
     message: 'Enter your Master PIN to encrypt the backup file.\n\nWithout your PIN, the backup cannot be restored.',
     type: 'info',
     requireInput: true,
+    inputSecret: true,
     inputPlaceholder: 'Enter Master PIN',
     inputHint: 'PIN is used as the encryption key',
     confirmText: 'Encrypt & Save',
@@ -1581,6 +1582,7 @@ async function processRestorePayload(payload) {
       message: 'Enter the Master PIN used when this backup was created.',
       type: 'info',
       requireInput: true,
+      inputSecret: true,
       inputPlaceholder: 'Enter Master PIN',
       inputHint: 'This decrypts and restores your vault',
       confirmText: 'Decrypt & Restore',
@@ -1662,6 +1664,39 @@ async function changePIN() {
 // ============================================================
 // RESET
 // ============================================================
+async function confirmReset() {
+  // Step 1: Warn user what will be lost
+  const { confirmed: step1 } = await showDialog({
+    title: 'Reset Vault?',
+    icon: '⚠️',
+    message: `This will permanently erase ALL your data:\n\n• ${state.accounts.length} account(s)\n• All custom categories\n• Your Master PIN\n\nThis cannot be undone.`,
+    type: 'danger',
+    confirmText: 'Continue',
+    cancelText: 'Cancel'
+  });
+  if (!step1) return;
+
+  // Step 2: Require typing RESET to confirm
+  const { confirmed: step2, input } = await showDialog({
+    title: 'Type RESET to confirm',
+    icon: '🗑️',
+    message: 'Type exactly RESET in capitals to permanently erase your vault.',
+    type: 'danger',
+    requireInput: true,
+    inputPlaceholder: 'Type RESET here',
+    inputHint: 'Case-sensitive — must be all caps',
+    confirmText: 'Erase Everything',
+    cancelText: 'Cancel'
+  });
+  if (!step2) return;
+  if (input !== 'RESET') {
+    toast('You must type RESET exactly', 'error');
+    return;
+  }
+
+  await resetApp();
+}
+
 async function resetApp() {
   if (!db) { location.reload(); return; }
   return new Promise((resolve) => {
@@ -1708,7 +1743,7 @@ function toast(msg, type='') {
 // ============================================================
 let dialogResolve = null;
 
-function showDialog({ title, message, icon, type = 'danger', confirmText = 'Confirm', cancelText = 'Cancel', requireInput = false, inputPlaceholder = '', inputHint = '' }) {
+function showDialog({ title, message, icon, type = 'danger', confirmText = 'Confirm', cancelText = 'Cancel', requireInput = false, inputPlaceholder = '', inputHint = '', inputSecret = false }) {
   return new Promise((resolve) => {
     dialogResolve = resolve;
 
@@ -1736,11 +1771,14 @@ function showDialog({ title, message, icon, type = 'danger', confirmText = 'Conf
     if (requireInput) {
       inputWrap.style.display = '';
       inputEl.value = '';
+      inputEl.type = inputSecret ? 'password' : 'text';
+      inputEl.inputMode = inputSecret ? 'numeric' : 'text';
       inputEl.placeholder = inputPlaceholder || 'Type here...';
       hintEl.textContent = inputHint || '';
       setTimeout(() => inputEl.focus(), 100);
     } else {
       inputWrap.style.display = 'none';
+      inputEl.type = 'text';
     }
 
     // Buttons
