@@ -1279,9 +1279,7 @@ async function buildEncryptedPayload() {
   const { confirmed, input: pin } = await showDialog({
     title: 'Encrypt Backup',
     icon: '🔐',
-    message: 'Enter your Master PIN to encrypt the backup file.
-
-Without your PIN, the backup cannot be restored.',
+    message: 'Enter your Master PIN to encrypt the backup file.\n\nWithout your PIN, the backup cannot be restored.',
     type: 'info',
     requireInput: true,
     inputPlaceholder: 'Enter Master PIN',
