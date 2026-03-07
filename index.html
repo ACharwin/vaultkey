@@ -375,7 +375,7 @@
           </div>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
         </div>
-        <div class="setting-item" onclick="if(confirm('Reset ALL data? This cannot be undone!'))resetApp()">
+        <div class="setting-item" onclick="confirmReset()">
           <div class="setting-left">
             <div class="setting-icon" style="background:rgba(255,77,109,0.2)">⚠️</div>
             <div class="setting-info"><h3>Reset Vault</h3><p>Erase all data and start over</p></div>
@@ -1103,6 +1103,10 @@ function deleteCat(id) {
 // BACKUP / RESTORE
 // ============================================================
 function backupData() {
+  if (state.accounts.length === 0) {
+    toast('Nothing to backup — add some accounts first!', 'error');
+    return;
+  }
   const payload = {
     version: 1,
     exported: new Date().toISOString(),
@@ -1116,7 +1120,7 @@ function backupData() {
   a.download = `vaultkey_backup_${new Date().toISOString().split('T')[0]}.vk`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  toast('Backup saved!','success');
+  toast('Backup saved — ' + state.accounts.length + ' accounts exported!', 'success');
 }
 function restoreData() {
   document.getElementById('restoreFile').click();
@@ -1163,6 +1167,36 @@ async function changePIN() {
 // ============================================================
 // RESET
 // ============================================================
+function confirmReset() {
+  const accCount = state.accounts.length;
+  const catCount = state.categories.length;
+
+  // Step 1 — descriptive warning
+  const step1 = confirm(
+    '⚠️ RESET VAULT\n\n' +
+    'This will permanently erase ALL of the following:\n\n' +
+    '  • ' + accCount + ' saved account(s)\n' +
+    '  • ' + catCount + ' categories\n' +
+    '  • Your Master PIN\n\n' +
+    'You will need to set up VaultKey completely from scratch.\n\n' +
+    'Do you want to continue?'
+  );
+  if (!step1) return;
+
+  // Step 2 — must type RESET exactly
+  const userInput = prompt(
+    '🔴 FINAL WARNING\n\n' +
+    'This action CANNOT be undone.\n\n' +
+    'Type  RESET  (all caps) to confirm:'
+  );
+  if (userInput !== 'RESET') {
+    toast('Reset cancelled — you must type RESET exactly', 'error');
+    return;
+  }
+
+  resetApp();
+}
+
 async function resetApp() {
   if (!db) { location.reload(); return; }
   return new Promise((resolve) => {
