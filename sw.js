@@ -1,4 +1,4 @@
-const CACHE = 'vaultkey-v5';
+const CACHE = 'vaultkey-v6';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
